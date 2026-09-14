@@ -20,6 +20,11 @@ RUN npm ci --ignore-scripts && npx prisma generate
 FROM node:20-bookworm-slim AS builder
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
+# La configuration est validée à la compilation : on fournit des valeurs factices.
+# Les vraies valeurs arrivent à l'exécution, par les variables d'environnement.
+ENV DATABASE_URL="postgresql://build:build@localhost:5432/build?schema=public" \
+    APP_SECRET="valeur-de-compilation-remplacee-a-l-execution" \
+    APP_URL="http://localhost:3000"
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN npx prisma generate && npm run build
@@ -53,7 +58,8 @@ EXPOSE 3000
 
 # Sonde de disponibilité (utilisée par Docker, Kubernetes, Railway, Render…)
 HEALTHCHECK --interval=30s --timeout=5s --start-period=25s --retries=3 \
-  CMD curl -fsS http://127.0.0.1:3000/api/stripe/webhook || exit 1
+  CMD curl -fsS "http://127.0.0.1:${PORT:-3000}/api/stripe/webhook" || exit 1
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
-CMD ["npx", "next", "start", "-H", "0.0.0.0", "-p", "3000"]
+# Le port est celui imposé par l'hébergeur (Render : PORT=10000, sinon 3000).
+CMD ["sh", "-c", "npx next start -H 0.0.0.0 -p ${PORT:-3000}"]

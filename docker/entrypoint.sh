@@ -21,9 +21,20 @@ if [ "${RUN_MIGRATIONS:-true}" = "true" ]; then
   # vos migrations avec « npx prisma migrate dev --name init »).
   npx prisma db push --skip-generate --accept-data-loss
 
-  if [ "${SEED_DEMO:-false}" = "true" ] || [ "${SEED_FORCE:-false}" = "true" ]; then
-    echo "[entrypoint] → Données de démonstration…"
+  # Le peuplement de démonstration ne s'exécute QUE sur une base vide : sans cette
+  # garde, chaque redéploiement effacerait les abonnements réels (le seed remet tout à zéro).
+  COMPTES=$(npx prisma db execute --stdin <<'SQL' 2>/dev/null | tr -dc '0-9' || echo 0
+SELECT count(*) FROM users;
+SQL
+)
+  if [ "${SEED_FORCE:-false}" = "true" ]; then
+    echo "[entrypoint] → Réinitialisation forcée des données de démonstration…"
     npx tsx prisma/seed.ts || echo "[entrypoint] ⚠️ peuplement ignoré"
+  elif [ "${SEED_DEMO:-false}" = "true" ] && [ "${COMPTES:-0}" = "0" ]; then
+    echo "[entrypoint] → Base vide : chargement des données de démonstration…"
+    npx tsx prisma/seed.ts || echo "[entrypoint] ⚠️ peuplement ignoré"
+  elif [ "${SEED_DEMO:-false}" = "true" ]; then
+    echo "[entrypoint] → Base déjà peuplée (${COMPTES} comptes) : peuplement ignoré"
   fi
 fi
 
