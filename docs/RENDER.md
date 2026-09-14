@@ -1,5 +1,14 @@
 # Mise en ligne sur Render — pas à pas
 
+> ## ✅ Déjà en ligne
+>
+> Le dépôt a été déployé automatiquement via l'API Render :
+> **https://ai-business-os-1aii.onrender.com**
+> — service `srv-dak2o7142hec73bpr4f0`, base `dpg-dak2nk0jo6nc73b99nt0-a`, région Francfort.
+> Ce document sert à refaire l'opération à l'identique, ou à en créer une seconde instance.
+> Le script `scripts/render-deploy.py` réalise tout le processus en une commande :
+> `RENDER_API_KEY=rnd_… python3 scripts/render-deploy.py`
+
 Objectif : obtenir une **adresse permanente** du type `https://ai-business-os.onrender.com`, en ligne
 24 h/24, avec sa base PostgreSQL, en une vingtaine de minutes.
 

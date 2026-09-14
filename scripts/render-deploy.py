@@ -90,6 +90,13 @@ def api(method: str, path: str, body=None, silencieux=False):
         return {"__erreur__": 0, "detail": str(exc)}, 0
 
 
+def deballer(obj, cle: str):
+    """L'API Render enveloppe parfois la réponse : {"service": {…}}. On la déballe."""
+    if isinstance(obj, dict) and isinstance(obj.get(cle), dict):
+        return obj[cle]
+    return obj
+
+
 def pause(sec: int, message: str) -> None:
     for reste in range(sec, 0, -1):
         log(f"    … {message} ({reste} s)")
@@ -268,22 +275,37 @@ def creer_service(owner_id: str, database_url: str) -> dict:
         log("      …ou autorise Render à lire le dépôt (Connect GitHub dans Render).")
         sys.exit(6)
 
-    log(f"  ✓ Service créé : {service.get('id')}")
+    service = deballer(service, "service")
+    if not isinstance(service, dict) or not service.get("id"):
+        log(f"  ✗ Réponse inattendue de Render : {str(service)[:300]}")
+        sys.exit(6)
+    log(f"  ✓ Service créé : {service['id']}")
     log(f"    Tableau de bord : {service.get('dashboardUrl', '?')}")
     return service
 
 
-def declencher_deploiement(service_id: str) -> str:
-    titre("Premier déploiement")
-    deploiement, code = api(
-        "POST", f"/services/{service_id}/deploys", {"clearCache": "clear"}
-    )
+def deploiement_en_cours(service_id: str) -> str:
+    """Renvoie l'état du dernier déploiement, ou une chaîne vide s'il n'y en a aucun."""
+    items, code = api("GET", f"/services/{service_id}/deploys?limit=1", silencieux=True)
+    if code == 200 and isinstance(items, list) and items:
+        dep = deballer(items[0], "deploy")
+        return (dep or {}).get("status", "")
+    return ""
+
+
+def declencher_deploiement(service_id: str) -> None:
+    titre("Déploiement")
+    etat = deploiement_en_cours(service_id)
+    finaux = {"live", "build_failed", "update_failed", "canceled", "deactivated"}
+    if etat and etat not in finaux:
+        log(f"  ✓ Un déploiement est déjà en cours (état : {etat}) — on le laisse terminer")
+        return
+    deploiement, code = api("POST", f"/services/{service_id}/deploys", {"clearCache": "clear"})
     if code not in (200, 201):
-        log("  ⚠ Le déclenchement a échoué — un déploiement est peut-être déjà en cours.")
-        return ""
-    dep_id = deploiement.get("id", "")
-    log(f"  ✓ Déploiement lancé : {dep_id}")
-    return dep_id
+        log("  ⚠ Déclenchement refusé — vérifie l'onglet « Events » du tableau de bord.")
+        return
+    dep = deballer(deploiement, "deploy")
+    log(f"  ✓ Déploiement lancé : {(dep or {}).get('id', '?')}")
 
 
 def attendre_deploiement(service_id: str) -> str:
@@ -295,8 +317,8 @@ def attendre_deploiement(service_id: str) -> str:
     for _ in range(120):  # jusqu'à ~20 minutes
         items, code = api("GET", f"/services/{service_id}/deploys?limit=1", silencieux=True)
         if code == 200 and isinstance(items, list) and items:
-            dep = items[0].get("deploy", items[0])
-            etat = dep.get("status", "?")
+            dep = deballer(items[0], "deploy")
+            etat = (dep or {}).get("status", "?")
             if not etats_vus or etats_vus[-1] != etat:
                 log(f"    → état : {etat}")
                 etats_vus.append(etat)
@@ -308,9 +330,10 @@ def attendre_deploiement(service_id: str) -> str:
 
 def url_service(service_id: str) -> str:
     service, code = api("GET", f"/services/{service_id}", silencieux=True)
-    if code != 200 or not isinstance(service, dict):
+    if code != 200:
         return ""
-    details = service.get("serviceDetails", {}) or {}
+    service = deballer(service, "service")
+    details = (service or {}).get("serviceDetails", {}) or {}
     return details.get("url", "") or ""
 
 
