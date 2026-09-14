@@ -1,0 +1,79 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+#  AI Business OS — module paiement : pile complète en une commande
+#
+#  1. Copiez .env.production.template en .env et renseignez vos valeurs
+#     (au minimum APP_SECRET ; STRIPE_* dès que vous voulez encaisser).
+#  2. docker compose up -d --build
+#  3. Ouvrez http://localhost:3000
+#
+#  Pour un serveur public, ajoutez un reverse proxy HTTPS devant (voir docs/DEPLOIEMENT.md).
+# ═══════════════════════════════════════════════════════════════════════════════
+
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-aibos}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-aibos}
+      POSTGRES_DB: ${POSTGRES_DB:-aibos}
+    volumes:
+      - dbdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-aibos} -d ${POSTGRES_DB:-aibos}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    # Décommentez pour inspecter la base depuis votre machine :
+    # ports: ["5432:5432"]
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      # Base : pointe par défaut sur le service « db » ci-dessus
+      DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-aibos}:${POSTGRES_PASSWORD:-aibos}@db:5432/${POSTGRES_DB:-aibos}?schema=public}
+      APP_URL: ${APP_URL:-http://localhost:3000}
+      APP_SECRET: ${APP_SECRET:?APP_SECRET est obligatoire (openssl rand -hex 32)}
+
+      # Stripe — laissez vide pour le mode simulation, sinon sk_test_… puis sk_live_…
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      STRIPE_PRICE_ID_STARTER_MONTH: ${STRIPE_PRICE_ID_STARTER_MONTH:-}
+      STRIPE_PRICE_ID_STARTER_YEAR: ${STRIPE_PRICE_ID_STARTER_YEAR:-}
+      STRIPE_PRICE_ID_PRO_MONTH: ${STRIPE_PRICE_ID_PRO_MONTH:-}
+      STRIPE_PRICE_ID_PRO_YEAR: ${STRIPE_PRICE_ID_PRO_YEAR:-}
+      STRIPE_PRICE_ID_BUSINESS_MONTH: ${STRIPE_PRICE_ID_BUSINESS_MONTH:-}
+      STRIPE_PRICE_ID_BUSINESS_YEAR: ${STRIPE_PRICE_ID_BUSINESS_YEAR:-}
+      ALLOW_SIMULATION: ${ALLOW_SIMULATION:-auto}
+
+      # Authentification : la démo est coupée en production par défaut
+      DEMO_LOGIN: ${DEMO_LOGIN:-auto}
+
+      # Règles commerciales
+      ANNUAL_DISCOUNT_PERCENT: ${ANNUAL_DISCOUNT_PERCENT:-20}
+      PAST_DUE_GRACE_DAYS: ${PAST_DUE_GRACE_DAYS:-3}
+      OWNER_EMAIL: ${OWNER_EMAIL:-owner@example.com}
+
+      # Coordonnées de réception des virements clients (facultatif)
+      BANK_ACCOUNT_HOLDER: ${BANK_ACCOUNT_HOLDER:-}
+      BANK_NAME: ${BANK_NAME:-}
+      BANK_IBAN: ${BANK_IBAN:-}
+      BANK_BIC: ${BANK_BIC:-}
+      BANK_ADDRESS: ${BANK_ADDRESS:-}
+      BANK_ROUTING_NOTE: ${BANK_ROUTING_NOTE:-}
+
+      # Préparation de la base au démarrage
+      RUN_MIGRATIONS: ${RUN_MIGRATIONS:-true}
+      # Passez SEED_DEMO=true pour charger le jeu de démonstration (propriétaire + clients)
+      SEED_DEMO: ${SEED_DEMO:-false}
+
+volumes:
+  dbdata:

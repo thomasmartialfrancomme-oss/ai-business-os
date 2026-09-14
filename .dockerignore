@@ -1,0 +1,16 @@
+# Contexte de construction Docker : on exclut tout ce qui ne doit pas entrer dans l'image.
+node_modules
+.next
+.git
+.gitignore
+.pgdata
+pgdata
+docs
+tests
+*.md
+.env
+.env.*
+!.env.example
+docker-compose.yml
+tsconfig.tsbuildinfo
+ai-business-os-module-paiement.zip

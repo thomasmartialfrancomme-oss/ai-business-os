@@ -1,0 +1,278 @@
+// AI Business OS — Schéma de base de données du module paiement
+// Provider : PostgreSQL (production-ready, exécuté ici en local pour les tests)
+//
+// IMPORTANT SÉCURITÉ : aucune donnée de carte (PAN), aucun CVV, aucun code bancaire
+// client, aucun mot de passe Stripe n'est stocké ici. Les seuls identifiants
+// conservés sont les identifiants opaques fournis par Stripe (cus_*, sub_*, pi_*…)
+// et les URLs hébergées par Stripe. Les données de carte ne quittent jamais Stripe.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  CUSTOMER
+  OWNER // propriétaire de la plateforme : accès /admin
+}
+
+enum BillingInterval {
+  MONTH
+  YEAR
+}
+
+/// Statuts alignés sur les statuts d'abonnement Stripe (source de vérité).
+enum SubscriptionStatus {
+  INCOMPLETE
+  INCOMPLETE_EXPIRED
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  UNPAID
+  PAUSED
+}
+
+enum InvoiceStatus {
+  DRAFT
+  OPEN
+  PAID
+  AWAITING_BANK_TRANSFER
+  VOID
+  UNCOLLECTIBLE
+  REFUNDED
+  PARTIALLY_REFUNDED
+}
+
+enum PaymentMethodType {
+  CARD
+  BANK_TRANSFER
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  REFUNDED
+  PARTIALLY_REFUNDED
+}
+
+enum WebhookStatus {
+  PROCESSED
+  IGNORED
+  FAILED
+}
+
+enum ActorType {
+  STRIPE
+  SYSTEM
+  ADMIN
+  CUSTOMER
+}
+
+model User {
+  id    String   @id @default(cuid())
+  email String   @unique
+  name  String
+  role  UserRole @default(CUSTOMER)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  subscription Subscription?
+  invoices     Invoice[]
+  payments     Payment[]
+  auditLogs    AuditLog[]
+
+  @@map("users")
+}
+
+model Subscription {
+  id     String @id @default(cuid())
+  userId String @unique @map("user_id")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // --- Références Stripe (identifiants opaques uniquement) ---
+  stripeCustomerId     String? @unique @map("stripe_customer_id")
+  stripeSubscriptionId String? @unique @map("stripe_subscription_id")
+  stripePriceId        String? @map("stripe_price_id")
+
+  // --- État d'abonnement (écrit UNIQUEMENT par le backend après webhook Stripe) ---
+  planCode           String             @map("plan_code")
+  interval           BillingInterval    @default(MONTH)
+  status             SubscriptionStatus @default(INCOMPLETE)
+  currentPeriodStart DateTime?          @map("current_period_start")
+  currentPeriodEnd   DateTime?          @map("current_period_end")
+  cancelAtPeriodEnd  Boolean            @default(false) @map("cancel_at_period_end")
+  lastPaymentStatus  String?            @map("last_payment_status")
+  lastPaymentAt      DateTime?          @map("last_payment_at")
+
+  amountCents Int    @default(0) @map("amount_cents")
+  currency    String @default("eur")
+
+  // Changement de forfait planifié (pris en compte à la fin de la période)
+  pendingPlanCode String?           @map("pending_plan_code")
+  pendingInterval BillingInterval?  @map("pending_interval")
+
+  // Échecs de paiement (relances Stripe)
+  lastFailureCode    String?   @map("last_failure_code")
+  lastFailureMessage String?   @map("last_failure_message")
+  lastFailureAt      DateTime? @map("last_failure_at")
+
+  canceledAt DateTime? @map("canceled_at")
+  endedAt    DateTime? @map("ended_at")
+
+  /// Dernier événement Stripe appliqué. Stripe ne garantit PAS l'ordre de livraison :
+  /// on ignore tout événement plus ancien que celui déjà appliqué (anti-régression).
+  lastStripeEventId String?   @map("last_stripe_event_id")
+  lastStripeEventAt DateTime? @map("last_stripe_event_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  invoices Invoice[]
+
+  @@index([status])
+  @@index([currentPeriodEnd])
+  @@map("subscriptions")
+}
+
+model Invoice {
+  id     String  @id @default(cuid())
+  userId String  @map("user_id")
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  subscriptionId String?       @map("subscription_id")
+  subscription   Subscription? @relation(fields: [subscriptionId], references: [id])
+
+  stripeInvoiceId String? @unique @map("stripe_invoice_id")
+  number          String? @unique
+  status          InvoiceStatus @default(OPEN)
+  paymentMethod   PaymentMethodType @default(CARD) @map("payment_method")
+
+  planCode String?          @map("plan_code")
+  interval BillingInterval? @map("interval")
+
+  amountDue      Int    @default(0) @map("amount_due")
+  amountPaid     Int    @default(0) @map("amount_paid")
+  amountRefunded Int    @default(0) @map("amount_refunded")
+  currency       String @default("eur")
+
+  periodStart DateTime? @map("period_start")
+  periodEnd   DateTime? @map("period_end")
+
+  hostedInvoiceUrl String? @map("hosted_invoice_url")
+  invoicePdfUrl    String? @map("invoice_pdf_url")
+
+  // --- Virement bancaire ---
+  bankTransferReference   String?   @unique @map("bank_transfer_reference")
+  bankTransferInstructions Json?    @map("bank_transfer_instructions")
+  bankTransferDeclaredAt  DateTime? @map("bank_transfer_declared_at")
+  bankTransferConfirmedBy String?   @map("bank_transfer_confirmed_by")
+  bankTransferConfirmedAt DateTime? @map("bank_transfer_confirmed_at")
+  bankTransferNote        String?   @map("bank_transfer_note")
+
+  paidAt    DateTime? @map("paid_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  payments Payment[]
+
+  @@index([userId, createdAt])
+  @@index([status])
+  @@map("invoices")
+}
+
+model Payment {
+  id        String  @id @default(cuid())
+  userId    String  @map("user_id")
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  invoiceId String? @map("invoice_id")
+  invoice   Invoice? @relation(fields: [invoiceId], references: [id])
+
+  stripePaymentIntentId String? @unique @map("stripe_payment_intent_id")
+  stripeChargeId        String? @map("stripe_charge_id")
+
+  amount         Int               @default(0)
+  amountRefunded Int               @default(0) @map("amount_refunded")
+  currency       String            @default("eur")
+  status         PaymentStatus     @default(PENDING)
+  method         PaymentMethodType @default(CARD)
+
+  failureCode    String? @map("failure_code")
+  failureMessage String? @map("failure_message")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([userId, createdAt])
+  @@index([status])
+  @@map("payments")
+}
+
+/// Journal des webhooks Stripe reçus. La contrainte d'unicité sur stripe_event_id
+/// garantit l'idempotence : un webhook répété n'est jamais rejoué.
+model WebhookEvent {
+  id            String        @id @default(cuid())
+  stripeEventId String        @unique @map("stripe_event_id")
+  type          String
+  apiVersion    String?       @map("api_version")
+  status        WebhookStatus @default(PROCESSED)
+  livemode      Boolean       @default(false)
+  payload       Json
+  error         String?
+  attempts      Int           @default(1)
+  receivedAt    DateTime      @default(now()) @map("received_at")
+  processedAt   DateTime?     @map("processed_at")
+
+  @@index([type])
+  @@index([receivedAt])
+  @@map("webhook_events")
+}
+
+/// Piste d'audit : qui a changé quoi, et sur la base de quel événement.
+model AuditLog {
+  id         String    @id @default(cuid())
+  actorType  ActorType @map("actor_type")
+  actorId    String?   @map("actor_id")
+  action     String
+  targetType String?   @map("target_type")
+  targetId   String?   @map("target_id")
+  metadata   Json?
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  userId String? @map("user_id")
+  user   User?   @relation(fields: [userId], references: [id])
+
+  @@index([action])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+/// Paramètres de la plateforme (coordonnées bancaires de réception, etc.),
+/// modifiables par l'administrateur depuis /admin/settings.
+model PlatformSetting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("platform_settings")
+}
+
+/// Objets Stripe simulés — utilisés UNIQUEMENT en mode simulation
+/// (absence de clé Stripe). Permet de dérouler le parcours complet et de faire
+/// circuler de vrais webhooks signés vers /api/stripe/webhook sans réseau.
+model SimObject {
+  id        String   @id
+  type      String
+  data      Json
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([type])
+  @@map("sim_objects")
+}

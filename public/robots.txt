@@ -1,0 +1,10 @@
+User-agent: *
+Allow: /
+Allow: /pricing
+Allow: /login
+
+# Espaces privés : jamais indexés par les moteurs de recherche
+Disallow: /billing
+Disallow: /admin
+Disallow: /api
+Disallow: /sim

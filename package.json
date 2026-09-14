@@ -1,0 +1,46 @@
+{
+  "name": "ai-business-os-payments",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Module paiement Stripe pour AI Business OS — abonnements, webhooks, facturation, revenus, virements bancaires.",
+  "scripts": {
+    "postinstall": "prisma generate",
+    "dev": "next dev -H 0.0.0.0 -p 3000",
+    "build": "prisma generate && next build",
+    "start": "next start -H 0.0.0.0 -p 3000",
+    "typecheck": "tsc --noEmit",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
+    "db:push": "prisma db push",
+    "db:seed": "tsx prisma/seed.ts",
+    "db:reset": "prisma migrate reset --force --skip-generate && tsx prisma/seed.ts",
+    "stripe:setup": "tsx scripts/stripe-setup.ts",
+    "stripe:verify-account": "tsx scripts/stripe-verify-account.ts",
+    "test": "tsx scripts/run-tests.ts",
+    "test:scenarios": "node --import tsx --test tests/stripe-scenarios.test.ts",
+    "test:security": "node --import tsx --test tests/security.test.ts",
+    "test:unit": "node --import tsx --test tests/unit/*.test.ts",
+    "test:all": "node --import tsx --test tests/**/*.test.ts",
+    "scenarios": "tsx scripts/sim-runner.ts"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.16.2",
+    "next": "15.5.25",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "stripe": "^22.6.2",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "prisma": "^6.16.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  },
+  "engines": {
+    "node": ">=20.9.0"
+  }
+}

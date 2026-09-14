@@ -1,0 +1,59 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+#  AI BUSINESS OS — fichiers à NE JAMAIS envoyer sur Git
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# ─── Secrets et configuration locale ──────────────────────────────────────────
+# ⚠️ Le plus important : .env contient APP_SECRET, les clés Stripe et vos
+#    coordonnées bancaires. Une fois poussé, il faut considérer les clés comme
+#    compromises et les régénérer dans Stripe.
+.env
+.env.local
+.env.*.local
+.env.production
+.env.staging
+*.pem
+*.key
+
+# (les modèles SANS secret sont versionnés, eux :)
+!.env.example
+!.env.production.template
+
+# ─── Dépendances et compilation ───────────────────────────────────────────────
+node_modules/
+.pnpm-store/
+.next/
+out/
+build/
+dist/
+*.tsbuildinfo
+next-env.d.ts
+
+# ─── Base de données locale (données réelles, ne remontent pas sur Git) ───────
+.pgdata/
+pgdata/
+*.sql
+*.sql.gz
+*.dump
+backup/
+
+# ─── Journaux et fichiers temporaires ─────────────────────────────────────────
+*.log
+npm-debug.log*
+yarn-error.log*
+logs/
+tmp/
+.cache/
+coverage/
+
+# ─── Environnements et éditeurs ───────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+
+# ─── Divers ───────────────────────────────────────────────────────────────────
+*.zip
+*.bundle
+ai-business-os-module-paiement.zip
