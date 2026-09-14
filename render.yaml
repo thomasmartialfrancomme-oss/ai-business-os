@@ -1,0 +1,96 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+#  AI Business OS — configuration Render (Blueprint)
+#
+#  Utilisation : Render → New → Blueprint → choisir ce dépôt.
+#  Render crée alors automatiquement la base PostgreSQL ET le service web,
+#  avec les variables d'environnement déjà câblées.
+#
+#  Si vous préférez la création manuelle (New → Web Service), suivez plutôt
+#  docs/RENDER.md : le résultat est identique.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+databases:
+  - name: ai-business-os-db
+    databaseName: aibos
+    user: aibos
+    # "free" : gratuit mais EXPIRE après 90 jours (limite Render).
+    # Pour un vrai site, remplacez par "basic-256mb" (~7 $/mois, sans expiration).
+    plan: free
+    region: frankfurt
+
+services:
+  - type: web
+    name: ai-business-os
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    # "free" : gratuit, mais le service se met en veille après 15 min sans visite
+    # (le premier accès suivant prend ~1 minute). "starter" pour un service permanent.
+    plan: free
+    region: frankfurt
+    # Sonde de disponibilité : notre endpoint répond 200 sur GET et ne dépend pas de Stripe.
+    healthCheckPath: /api/stripe/webhook
+    autoDeploy: true
+    envVars:
+      # ── Base de données (câblée automatiquement depuis la base créée ci-dessus) ──
+      - key: DATABASE_URL
+        fromDatabase:
+          name: ai-business-os-db
+          property: connectionString
+
+      # ── Application ──
+      # Render génère une valeur aléatoire : sert à signer les sessions.
+      - key: APP_SECRET
+        generateValue: true
+      # À renseigner avec l'URL Render (ex. https://ai-business-os.onrender.com)
+      # après la création du service.
+      - key: APP_URL
+        sync: false
+
+      # ── Comportement ──
+      # "true" : active la connexion de démonstration (choix d'un compte dans /login).
+      # Passez à "false" quand votre authentification réelle est branchée.
+      - key: DEMO_LOGIN
+        value: "true"
+      # "auto" : mode simulation tant qu'aucune clé Stripe n'est fournie.
+      - key: ALLOW_SIMULATION
+        value: "auto"
+      # ⚠️ "true" UNIQUEMENT au premier déploiement : le peuplement remet la base à zéro.
+      # Repassez à "false" juste après, sinon chaque redéploiement effacerait les données.
+      - key: SEED_DEMO
+        value: "true"
+
+      # ── Règles commerciales ──
+      - key: ANNUAL_DISCOUNT_PERCENT
+        value: "20"
+      - key: PAST_DUE_GRACE_DAYS
+        value: "3"
+
+      # ── Stripe (à remplir depuis le tableau de bord Stripe) ──
+      # Test : sk_test_… puis Live : sk_live_…  (laisser vide = mode simulation)
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: STRIPE_PRICE_ID_STARTER_MONTH
+        sync: false
+      - key: STRIPE_PRICE_ID_STARTER_YEAR
+        sync: false
+      - key: STRIPE_PRICE_ID_PRO_MONTH
+        sync: false
+      - key: STRIPE_PRICE_ID_PRO_YEAR
+        sync: false
+      - key: STRIPE_PRICE_ID_BUSINESS_MONTH
+        sync: false
+      - key: STRIPE_PRICE_ID_BUSINESS_YEAR
+        sync: false
+
+      # ── Coordonnées de réception des virements clients (facultatif) ──
+      # Modifiables ensuite directement dans /admin/settings.
+      - key: BANK_ACCOUNT_HOLDER
+        sync: false
+      - key: BANK_IBAN
+        sync: false
+      - key: BANK_BIC
+        sync: false
+      - key: OWNER_EMAIL
+        sync: false
