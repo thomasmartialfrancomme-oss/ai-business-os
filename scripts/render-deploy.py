@@ -201,10 +201,8 @@ def variables_environnement(database_url: str, url_app: str) -> list:
         {"key": "DATABASE_URL", "value": database_url},
         {"key": "APP_SECRET", "value": secrets.token_hex(32)},
         {"key": "APP_URL", "value": url_app},
-        # La version du Dockerfile actuellement sur GitHub écoute sur 3000 :
-        # PORT indique à Render où router le trafic. Inutile dès que la
-        # version à port dynamique sera poussée.
-        {"key": "PORT", "value": "3000"},
+        # Pas de variable PORT : Render en fournit une (10000 par défaut) et le
+        # Dockerfile du dépôt écoute dessus. En définir une casserait la détection.
         {"key": "NODE_ENV", "value": "production"},
         {"key": "DEMO_LOGIN", "value": "true"},
         {"key": "ALLOW_SIMULATION", "value": "auto"},
@@ -339,7 +337,11 @@ def tester_site(url: str) -> bool:
 
 
 def finaliser(service_id: str, url_reelle: str) -> None:
-    """Met APP_URL à jour et coupe le peuplement de démonstration."""
+    """Aligne APP_URL sur l'adresse réelle du service.
+
+    SEED_DEMO est laissé tel quel : le script d'entrée ne peuple que si la base
+    est vide, il n'y a donc aucun risque d'effacer des données au redémarrage.
+    """
     titre("Réglages finaux")
 
     actuelles, code = api("GET", f"/services/{service_id}/env-vars", silencieux=True)
@@ -359,10 +361,6 @@ def finaliser(service_id: str, url_reelle: str) -> None:
             log(f"  APP_URL : {var['value']} → {url_reelle}")
             var["value"] = url_reelle
             modifs.append("APP_URL")
-        if var["key"] == "SEED_DEMO" and var["value"] != "false":
-            log("  SEED_DEMO : true → false (plus aucun effacement de données au redémarrage)")
-            var["value"] = "false"
-            modifs.append("SEED_DEMO")
 
     if not modifs:
         log("  ✓ Rien à corriger")

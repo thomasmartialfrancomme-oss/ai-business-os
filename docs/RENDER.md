@@ -79,7 +79,7 @@ Passe ensuite à la section **Après le déploiement**.
 | `DATABASE_URL` | l'*Internal Database URL* copiée en B1 |
 | `APP_SECRET` | clique sur **Generate** (Render crée une valeur aléatoire) |
 | `APP_URL` | `https://ai-business-os.onrender.com` *(à ajuster avec l'URL réelle après le premier déploiement)* |
-| `PORT` | `3000` |
+| `PORT` | *(à ne pas mettre)* — Render fournit lui-même 10000, et le `Dockerfile` l'utilise automatiquement |
 | `DEMO_LOGIN` | `true` |
 | `ALLOW_SIMULATION` | `auto` |
 | `SEED_DEMO` | `true` |
@@ -87,30 +87,28 @@ Passe ensuite à la section **Après le déploiement**.
 | `PAST_DUE_GRACE_DAYS` | `3` |
 | `OWNER_EMAIL` | ton adresse e-mail |
 
-> **Pourquoi `PORT=3000` ?** Le `Dockerfile` actuellement dans le dépôt démarre l'application sur le
-> port 3000. En définissant `PORT=3000`, tu indiques à Render où router le trafic. Une version du
-> `Dockerfile` qui suit automatiquement le `$PORT` de Render est prête mais pas encore poussée sur
-> GitHub : dès qu'elle le sera, cette variable deviendra inutile (et pourra être supprimée).
+> **Le port ?** Plus rien à faire : le `Dockerfile` du dépôt écoute sur le port que Render fournit
+> (`PORT`, 10000 par défaut). Ne définis pas de variable `PORT` : laisse Render la fournir.
 
 5. **Create Web Service** → le déploiement démarre.
 
 ---
 
-## Après le déploiement (les 3 réglages importants)
+## Après le déploiement (les vérifications)
 
 ### 1. Vérifier que le site répond
 
 Ouvre l'URL affichée en haut de la page du service (ex. `https://ai-business-os.onrender.com`).
 Tu dois voir la page d'accueil AI Business OS avec le badge **« Mode simulation »**.
 
-### 2. Corriger `APP_URL`, puis couper le peuplement
+### 2. Corriger `APP_URL` si besoin
 
 Dans l'onglet **Environment** du service :
 
 - mets `APP_URL` sur l'URL réelle du service (copie-la depuis le haut de la page) ;
-- **repasse `SEED_DEMO` à `false`** ⚠️ : le peuplement de démonstration **remet la base à zéro**.
-  Avec la version du dépôt actuelle, le laisser à `true` effacerait tes données à chaque
-  redéploiement. *(La correction qui rend ce garde-fou automatique est prête, en attente d'envoi.)*
+- `SEED_DEMO` peut rester à `true` sans risque : le peuplement ne s'exécute **que si la base est
+  vide**. Dès que la base contient des comptes, il est ignoré. Pour forcer un re-peuplement
+  volontaire (efface tout), ajoute `SEED_FORCE=true` le temps d'un déploiement.
 - clique **Save Changes** → Render redéploie.
 
 ### 3. Se connecter et tester le parcours
@@ -144,7 +142,7 @@ Dans l'onglet **Environment** du service :
 | **Plan Free — base** | La base PostgreSQL gratuite **expire au bout de 90 jours**. Pour du durable : `Basic-256mb`, ou une base externe gratuite (Neon, Supabase) dont tu colles l'URL dans `DATABASE_URL`. |
 | **Variables modifiées** | Enregistrer une variable déclenche un redéploiement automatique. |
 | **Journaux** | Onglet **Logs** du service : tu y vois les migrations, le peuplement et chaque webhook traité. |
-| **Port** | Render fournit `PORT` (10000 par défaut). Notre conteneur écoute sur 3000 → variable `PORT=3000` (voir plus haut), ou Dockerfile mis à jour. |
+| **Port** | Automatique : Render fournit `PORT` (10000 par défaut) et le `Dockerfile` écoute dessus. Aucune variable à créer. |
 | **Pas de disque persistant** | Inutile ici : les données sont dans PostgreSQL, pas dans le conteneur. |
 
 ---
@@ -153,9 +151,9 @@ Dans l'onglet **Environment** du service :
 
 | Symptôme | Cause probable | Solution |
 |---|---|---|
-| « No open ports detected » | L'application écoute sur un port que Render n'attend pas | Vérifie la variable `PORT=3000` |
+| « No open ports detected » | L'application écoute sur un port que Render n'attend pas | Ne définis **pas** de variable `PORT` (Render la fournit), et vérifie que le *Language* est bien **Docker** |
 | Le déploiement échoue à la compilation | Configuration incomplète au build | C'est déjà traité : le `Dockerfile` du dépôt fournit des valeurs de substitution. Vérifie que le *Language* est bien **Docker**. |
 | `Can't reach database server` | `DATABASE_URL` absente ou externe alors que le service est en plan gratuit | Utilise impérativement l'**Internal Database URL** |
 | Le dépôt n'apparaît pas dans Render | Render n'est pas autorisé sur ce dépôt privé | GitHub → Settings → Applications → *Render* → autoriser le dépôt |
-| Page d'accueil sans comptes de démonstration | `SEED_DEMO` était à `false` au premier déploiement | Repasse-le à `true`, déploie une fois, puis remets-le à `false` |
+| Page d'accueil sans comptes de démonstration | `SEED_DEMO` à `false`, ou base non vide sans comptes | Mets `SEED_DEMO=true` pour peupler une base vide ; `SEED_FORCE=true` pour effacer et repeupler |
 | « Authentification non configurée » sur /login | `DEMO_LOGIN` à `false` | Mets `DEMO_LOGIN=true` pour la démo (ou branche ton fournisseur d'identité) |
